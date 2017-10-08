@@ -36,10 +36,8 @@ class Address(BaseAddress):
         from ..lib.codecs import Base58Codec
         return Base58Codec
 
-    def __init__(self, addr_type, hashed_data, mainnet=None):
-        if mainnet is None:
-            mainnet = is_mainnet()
-        network = 'mainnet' if mainnet else 'testnet'
+    def __init__(self, addr_type, hashed_data, network):
+
         self.network = network
         self.type = addr_type
         self.hash = hashed_data
@@ -49,24 +47,19 @@ class Address(BaseAddress):
 
 
 class SegWitAddress(Address):
-    
+
     @staticmethod
     def get_codec():
         from ..lib.codecs import Bech32Codec
         return Bech32Codec
-    
-    def __init__(self, addr_type, hashed_data, version, mainnet=None):
-        super().__init__(addr_type, hashed_data, mainnet)
+
+    def __init__(self, addr_type: str, hashed_data: bytes, version: int, network: str):
+        super().__init__(addr_type, hashed_data, network)
         self.version = version
 
     def to_address(self):
-        if self.type == 'p2wpkh':
-            addr_type = 'p2pkh'
-        elif self.type == 'p2wsh':
-            addr_type = 'p2sh'
-        else:
-            raise ValueError('SegWitAddress type does not match p2wpkh nor p2wsh, {} instead'.format(self.type))
-        return Address(addr_type, self.hash, self.network == 'mainnet')
-    
+
+        return Address(self.hash, self.network, addr_type='p2wpkh')
+
     def __eq__(self, other):
         return super().__eq__(other) and self.version == other.version
