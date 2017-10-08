@@ -11,9 +11,7 @@
 
 from abc import ABCMeta, abstractmethod
 from base58 import b58encode_check, b58decode_check
-
 from .bech32 import decode, encode
-from ..setup import is_mainnet, net_name
 from ..structs.address import Address, SegWitAddress
 
 
@@ -35,22 +33,23 @@ class Codec(metaclass=ABCMeta):
 
     @classmethod
     def check_network(cls, network):
-        if (network == 'mainnet') != is_mainnet():
-            raise CouldNotDecode('Trying to parse {} address in {} environment'.format(network, net_name()))
+        pass
 
 
 class Base58Codec(Codec):
-    
+
     raw_prefixes = {('mainnet', 'p2pkh'): bytearray(b'\x00'),
                     ('testnet', 'p2pkh'): bytearray(b'\x6f'),
                     ('mainnet', 'p2sh'): bytearray(b'\x05'),
-                    ('testnet', 'p2sh'): bytearray(b'\xc4')}
+                    ('testnet', 'p2sh'): bytearray(b'\xc4')
+                    }
 
     prefixes = {'1': ('p2pkh', 'mainnet'),
                 'm': ('p2pkh', 'testnet'),
                 'n': ('p2pkh', 'testnet'),
                 '3': ('p2sh', 'mainnet'),
-                '2': ('p2sh', 'testnet')}
+                '2': ('p2sh', 'testnet')
+                }
 
     hash_len = 20
 
