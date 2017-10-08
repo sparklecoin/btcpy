@@ -19,7 +19,6 @@ from abc import ABCMeta
 
 from ..lib.types import HexSerializable
 from .address import Address, SegWitAddress
-from ..setup import is_mainnet
 
 
 class Key(HexSerializable, metaclass=ABCMeta):
@@ -36,7 +35,7 @@ class PrivateKey(Key):
 
     @staticmethod
     def from_wif(wif):
-        '''Decode private_key from WIF.''''
+        '''Decode private_key from WIF.'''
 
         if not 51 <= len(wif) <= 52:
             raise ValueError(InvalidWifLenght)
@@ -102,7 +101,7 @@ class PublicKey(Key):
              0x04: 'uncompressed'}
 
     headers = {val: key for key, val in types.items()}
-    
+
     @staticmethod
     def from_point(point, compressed=True):
         result = PublicKey(bytearray([0x04]) + point.x().to_bytes(32, 'big') + point.y().to_bytes(32, 'big'))
@@ -175,23 +174,23 @@ class PublicKey(Key):
         ripe = hashlib.new('ripemd160')
         ripe.update(sha)
         return bytearray(ripe.digest())
-    
+
     def serialize(self):
         return self.uncompressed if self.type == 'uncompressed' else self.compressed
 
-    def to_address(self, mainnet=None):
-        if mainnet is None:
-            mainnet = is_mainnet()
-        return Address('p2pkh', self.hash(), mainnet)
+    def to_address(self, network, addr_type='p2pkh'):
 
-    def to_segwit_address(self, mainnet=None):
-        if mainnet is None:
-            mainnet = is_mainnet()
+        return Address(addr_type=addr_type, hashed_data=self.hash(),
+                       network=network)
+
+    def to_segwit_address(self, network, version=1):
+
         if self.type == 'uncompressed':
             pubk = PublicKey(self.compressed)
         else:
             pubk = self
-        return SegWitAddress('p2wpkh', pubk.hash(), mainnet)
+        return SegWitAddress(addr_type='p2wpkh', hashed_data=pubk.hash(),
+                             network=network, version=version)
 
     def compress(self):
         if self.type != 'uncompressed':
