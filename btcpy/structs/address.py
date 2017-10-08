@@ -11,8 +11,6 @@
 
 from abc import ABCMeta, abstractmethod
 
-from ..setup import is_mainnet
-
 
 class BaseAddress(metaclass=ABCMeta):
     
