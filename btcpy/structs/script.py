@@ -19,7 +19,6 @@ from ..lib.types import HexSerializable, Immutable, cached
 from ..lib.parsing import ScriptParser, Parser, Stream, UnexpectedOperationFound
 from .crypto import WrongPubKeyFormat
 from .address import Address, SegWitAddress
-from ..setup import is_mainnet
 
 
 class WrongScriptTypeException(Exception):
@@ -547,12 +546,12 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
         return StackData.from_bytes(self.serialize())
 
     @cached
-    def to_address(self, segwit_version=None):
+    def to_address(self, network, segwit_version=None):
         # TODO integration-test this
         if segwit_version is not None:
-            return SegWitAddress('p2wsh', self.p2wsh_hash(), segwit_version, is_mainnet())
+            return SegWitAddress('p2wsh', self.p2wsh_hash(), segwit_version, network)
         else:
-            return Address('p2sh', self.p2sh_hash(), is_mainnet())
+            return Address('p2sh', self.p2sh_hash(), network)
 
     def is_standard(self):
         """Subclasses which have standard types should reimplement this method"""
