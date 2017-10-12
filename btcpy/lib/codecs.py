@@ -28,7 +28,7 @@ class Codec(metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    def decode(string: str, check_network=True) -> Address:
+    def decode(string: str) -> Address:
         raise NotImplemented
 
     @classmethod
@@ -63,7 +63,7 @@ class Base58Codec(Codec):
         return b58encode_check(bytes(prefix + address.hash))
 
     @staticmethod
-    def decode(string, check_network=True):
+    def decode(string):
         try:
             addr_type, network = Base58Codec.prefixes[string[0]]
         except KeyError:
@@ -73,8 +73,6 @@ class Base58Codec(Codec):
         if len(hashed_data) != Base58Codec.hash_len:
             raise CouldNotDecode('Data of the wrong length: {}, expected {}'.format(len(hashed_data),
                                                                                     Base58Codec.hash_len))
-        if check_network:
-            Base58Codec.check_network(network)
         
         return Address(addr_type, hashed_data, network == 'mainnet')
 

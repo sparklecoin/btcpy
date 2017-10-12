@@ -20,8 +20,8 @@ class BaseAddress(metaclass=ABCMeta):
         raise NotImplemented
     
     @classmethod
-    def from_string(cls, string, check_network=True):
-        return cls.get_codec().decode(string, check_network)
+    def from_string(cls, string):
+        return cls.get_codec().decode(string)
 
     def __str__(self):
         return self.__class__.get_codec().encode(self)

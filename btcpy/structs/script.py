@@ -514,7 +514,7 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
         if len(args) == 1:
             return args[0]
         return args
-    
+
     @staticmethod
     def empty():
         return ScriptPubKey(bytearray())
@@ -605,8 +605,8 @@ class P2pkhScript(ScriptPubKey):
     def type(self):
         return 'p2pkh'
 
-    def address(self):
-        return Address('p2pkh', self.pubkeyhash)
+    def address(self, network):
+        return Address('p2pkh', self.pubkeyhash, network)
 
     def is_standard(self):
         return True
@@ -634,8 +634,8 @@ class P2wpkhV0Script(P2pkhScript):
     def type(self):
         return 'p2wpkhv0'
 
-    def address(self):
-        return SegWitAddress('p2wpkh', self.pubkeyhash, 0)
+    def address(self, network, version=0):
+        return SegWitAddress('p2wpkh', self.pubkeyhash, version, network)
 
     def get_scriptcode(self):
         return P2pkhScript(self.pubkeyhash).to_stack_data()
@@ -685,8 +685,8 @@ class P2shScript(ScriptPubKey):
     def is_standard(self):
         return True
 
-    def address(self):
-        return Address('p2sh', self.scripthash)
+    def address(self, network):
+        return Address('p2sh', self.scripthash, network)
 
 
 # noinspection PyUnresolvedReferences
@@ -715,8 +715,8 @@ class P2wshV0Script(P2shScript):
     def type(self):
         return 'p2wshv0'
 
-    def address(self):
-        return Address('p2wsh', self.scripthash)
+    def address(self, network):
+        return Address('p2wsh', self.scripthash, network)
 
 
 # noinspection PyUnresolvedReferences
