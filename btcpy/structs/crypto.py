@@ -10,7 +10,7 @@
 # LICENSE.md file.
 
 from binascii import hexlify, unhexlify
-from base58 import b58decode_check
+from base58 import b58decode_check, b58encode_check
 from hashlib import sha256
 from ecdsa import SigningKey, SECP256k1
 from ecdsa.util import sigencode_der
@@ -49,10 +49,22 @@ class PrivateKey(Key):
     def unhexlify(hexa):
         return PrivateKey(bytearray(unhexlify(hexa)))
 
-    def __init__(self, priv):
+    def __init__(self, priv, public_compressed=True):
         self.key = priv
+        self.public_compressed = public_compressed
 
-    def pub(self, compressed=True):
+    def to_wif(self, mainnet=None):
+        if mainnet is None:
+            mainnet = is_mainnet()
+        prefix = bytearray([0x80]) if mainnet else bytearray([0xef])
+        decoded = prefix + self.key
+        if self.public_compressed:
+            decoded.append(0x01)
+        return b58encode_check(bytes(decoded))
+
+    def pub(self, compressed=None):
+        if compressed is None:
+            compressed = self.public_compressed
         raw_pubkey = bytearray(SigningKey.from_string(self.key, curve=SECP256k1).get_verifying_key().to_string())
         uncompressed = PublicKey(bytearray([0x04]) + raw_pubkey)
         if compressed:
@@ -83,10 +95,10 @@ class PrivateKey(Key):
 
     def __eq__(self, other):
         return self.key == other.key
-    
+
     def __str__(self):
         return self.hexlify()
-    
+
 
 class WrongPubKeyFormat(Exception):
     pass
@@ -102,7 +114,7 @@ class PublicKey(Key):
              0x04: 'uncompressed'}
 
     headers = {val: key for key, val in types.items()}
-    
+
     @staticmethod
     def from_point(point, compressed=True):
         result = PublicKey(bytearray([0x04]) + point.x().to_bytes(32, 'big') + point.y().to_bytes(32, 'big'))
@@ -141,7 +153,7 @@ class PublicKey(Key):
             header, *body = pubkey
         except ValueError:
             raise WrongPubKeyFormat('Got only one byte')
-        
+
         if header == 0x04:
             if len(body) != PublicKey.uncompressed_bytes:
                 raise WrongPubKeyFormat('Unexpected length for uncompressed pubkey: {}'.format(len(body)))
@@ -175,7 +187,7 @@ class PublicKey(Key):
         ripe = hashlib.new('ripemd160')
         ripe.update(sha)
         return bytearray(ripe.digest())
-    
+
     def serialize(self):
         return self.uncompressed if self.type == 'uncompressed' else self.compressed
 
