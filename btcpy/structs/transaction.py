@@ -180,6 +180,11 @@ class CoinBaseTxIn(TxIn):
 
 # noinspection PyUnresolvedReferences
 class TxOut(Immutable, HexSerializable, Jsonizable):
+    """
+    : value - value of the output <int>
+    : n - sequence number
+    : script_pubkey - ScriptPubkey object
+    """
 
     @classmethod
     def from_json(cls, dic):
