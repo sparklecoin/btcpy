@@ -14,6 +14,11 @@ from hashlib import sha256
 import hashlib
 
 from .types import Serializable, HexSerializable
+from .opcodes import OpCodeConverter
+
+
+class IncompleteParsingException(ValueError):
+    pass
 
 
 class Parser(object):
@@ -36,7 +41,8 @@ class Parser(object):
         return Parser(unhexlify(hexa))
 
     def __init__(self, bytes_):
-        self.string = bytes_
+        self._string = bytes_
+        self.pointer = 0
 
     def __rshift__(self, bytes_) -> bytearray:
         """
@@ -45,20 +51,29 @@ class Parser(object):
         :param bytes_: number of bytes to shift the pointer
         :return: part of the string consumed
         """
-        if not self.string:
+        if self.pointer == len(self._string):
             raise StopIteration('Trying to shift empty string')
 
-        result = self.string[:bytes_]
-
+        result = self._string[self.pointer:self.pointer + bytes_]
         if len(result) != bytes_:
             raise StopIteration('Not enough bytes available')
 
-        self.string = self.string[bytes_:]
+        self.pointer += bytes_
 
         return result
 
+    def __lshift__(self, bytes_) -> bytearray:
+        if len(self._string) == 0:
+            raise StopIteration("Trying to shift the empty string")
+        if self.pointer - bytes_ < 0:
+            raise StopIteration("Trying to lshift before the beginning of the string")
+        self.pointer -= bytes_
+
+        result = self._string[self.pointer:self.pointer + bytes_]
+        return result
+
     def __bool__(self):
-        return bool(self.string)
+        return self.pointer < len(self._string)
 
     def __next__(self):
         return (self >> 1)[0]
@@ -67,10 +82,10 @@ class Parser(object):
         return self
 
     def __len__(self):
-        return len(self.string)
+        return len(self._string) - self.pointer
 
     def __getitem__(self, item):
-        return self.string[item]
+        return self._string[item + self.pointer]
 
     def parse_varint(self):
         header = next(self)
@@ -120,17 +135,20 @@ class BlockHeaderParser(Parser):
 
 class BlockParser(BlockHeaderParser):
     def get_txn_count(self):
+
         return self.parse_varint()
 
     def get_txns(self):
+
         txn_count = self.get_txn_count()
         counter = 0
-        txns_parser = TransactionParser(self.string)
+        txns_parser = TransactionParser(self >> len(self))
         txns = []
         for i in range(txn_count):
             txns.append(txns_parser.get_next_tx())
             counter += 1
-        self.string = txns_parser.string
+        if len(txns_parser) != 0:
+            raise IncompleteParsingException("Incomplete Block parsing, leftover data...")
         return txns
 
 
@@ -193,7 +211,8 @@ class TransactionParser(Parser):
         if self.segwit:
             witnesses = []
             for _ in range(self.txins):
-                witnesses.append([StackData.from_bytes(self >> self.parse_varint()) for _ in range(self.parse_varint())])
+                witnesses.append(
+                    [StackData.from_bytes(self >> self.parse_varint()) for _ in range(self.parse_varint())])
             return witnesses
         raise ValueError('Trying to get witness on a non-segwit transaction')
 
@@ -206,15 +225,11 @@ class TransactionParser(Parser):
         from ..structs.transaction import (CoinBaseTxIn, Witness, TxIn, SegWitTransaction, Transaction)
 
         version = self._version()
-        # print('version: {}'.format(version))
         tstamp = self._timestamp()
         segwit, txins_data = self._txins_data()
-        # print('txins_data: {}'.format(txins_data))
         txouts = self._txouts()
-        # print('txouts: {}'.format(txouts))
         if segwit:
             witness = self._witness()
-            # print('witness: {}'.format([item.hexlify() for w in witness for item in w]))
             txins = [CoinBaseTxIn(*txin_data[2:], witness=Witness(wit))
                      if isinstance(txin_data[2], CoinBaseScriptSig)
                      else TxIn(*txin_data, witness=Witness(wit))
@@ -226,7 +241,6 @@ class TransactionParser(Parser):
                      for txin_data in txins_data]
 
         locktime = self._locktime()
-        # print('locktime: {}'.format(locktime))
 
         if len(txins) > 1 and isinstance(txins[0], CoinBaseTxIn):
             raise ValueError('Transaction looks like coinbase but has more than one txin')
@@ -244,27 +258,23 @@ class UnexpectedOperationFound(Exception):
 
 
 class ScriptParser(Parser):
-
     def match(self, template, end=True):
-        from ..structs.script import Script
         ops = iter(template.split(' '))
         pushes = []
         for op in ops:
-            if op in Script.opcode_to_int:
+            if OpCodeConverter.exists(op):
                 self.require(op)
             elif '<' in op and '>' in op:  # push operation
-                # print('Trying to match push template: {}'.format(op))
                 if op[-1] == '*':
                     pushes += self.require_pushes(zero=True)
                 elif op[-1] == '+':
-                    # print('Non-zero push ops')
                     pushes += self.require_pushes(zero=False)
                 elif op[-1] == '>':
                     pushes.append(self.require_push(op[1:-1]))
                 else:
                     raise ValueError('Could not parse push requirement: {}'.format(op))
             else:
-                ValueError('Could not understand template')
+                raise ValueError('Could not understand template')
         if end:
             self.require_empty()
         return pushes
@@ -276,7 +286,6 @@ class ScriptParser(Parser):
 
     def require_pushes(self, zero=False):
         pushes = []
-        next_op = None
         try:
             while True:
                 next_op = next(self)
@@ -284,7 +293,7 @@ class ScriptParser(Parser):
                 pushes.append(self.get_push(next_op))
         except UnexpectedOperationFound:
             # could not push, probably not a push operation, let's restore the buffer to the previous character
-            self.string = bytearray([next_op]) + self.string
+            self << 1
         except StopIteration:
             # we reached the end of the buffer
             pass
@@ -294,7 +303,10 @@ class ScriptParser(Parser):
             return pushes
 
     def require_push(self, constraint):
-        push_data = self.get_push()
+        try:
+            push_data = self.get_push()
+        except StopIteration:
+            raise UnexpectedOperationFound('Empty push where push was required')
         validator = PushValidator(constraint)
         if not validator.check(push_data):
             raise UnexpectedOperationFound('Push operation did not pass validation constraints: {} '
@@ -302,12 +314,11 @@ class ScriptParser(Parser):
         return push_data
 
     def require(self, op):
-        from ..structs.script import Script
         try:
             next_op = next(self)
         except StopIteration:
             raise UnexpectedOperationFound('No further operation: parser reached end of script')
-        if next_op != Script.opcode_to_int[op]:
+        if next_op != OpCodeConverter.to_int(op):
             raise UnexpectedOperationFound('{} not found, found {} instead'.format(op, next_op))
 
     def require_empty(self):
@@ -321,7 +332,6 @@ class ScriptParser(Parser):
                 curr_op = next(self)
         except StopIteration:
             raise
-        # print('Extracting StackData for op {} from {}'.format(curr_op, hexlify(self.string)))
         return StackData.from_push_op(self, curr_op)
 
 
@@ -347,7 +357,6 @@ class PushValidator(object):
 
 
 class Stream(HexSerializable):
-
     @staticmethod
     def unhexlify(hex_string):
         return Stream(bytearray(unhexlify(hex_string)))
@@ -376,10 +385,10 @@ class Stream(HexSerializable):
 
     def __bool__(self):
         return bool(self.body)
-    
+
     def sha256(self):
         return bytearray(sha256(self.body).digest())
-    
+
     def ripemd(self):
         ripe = hashlib.new('ripemd160')
         ripe.update(self.body)

@@ -17,10 +17,13 @@ from btcpy.structs.transaction import *
 from btcpy.structs.script import *
 from btcpy.structs.block import *
 from btcpy.structs.crypto import PublicKey, PrivateKey
-from btcpy.structs.address import Address
+from btcpy.structs.address import Address, SegWitAddress, P2shAddress, P2wshAddress
 from btcpy.lib.codecs import CouldNotDecode
 from btcpy.setup import setup
 from btcpy.structs.hd import *
+from btcpy.lib.base58 import b58decode, b58encode
+from btcpy.lib.base58 import b58decode_check, b58encode_check
+from btcpy.lib.parsing import IncompleteParsingException
 
 setup('regtest')
 
@@ -35,6 +38,7 @@ def get_data(filename):
 
 transactions = get_data('rawtxs')
 scripts = get_data('scripts')
+unknownscripts = get_data('unknownscripts')
 keys = get_data('xkeys')
 segwit_valid_addresses = get_data('segwit_addr_valid')
 segwit_invalid_addresses = get_data('segwit_addr_invalid')
@@ -48,10 +52,54 @@ privk = get_data('priv_addr_path')
 segsig = get_data('segwitsig')
 p2sh = get_data('p2sh')
 priv_pub_hash_addr_p2pkh_segwit = get_data('priv_pub_hash_addr_p2pkh_segwit')
+b58 = get_data('base58')
+b58chk = get_data('base58_check')
+segwit_hashes = get_data('segwit_hashes')
+wif = get_data('wif')
+p2wpkh_over_p2sh = get_data("p2wpkh_over_p2sh")
+p2wsh_over_p2sh = get_data("p2wsh_over_p2sh")
+
+
+class TestB58(unittest.TestCase):
+
+    def test_b58encode(self):
+        for hexa, encoded in b58:
+            self.assertEqual(b58encode(unhexlify(hexa)), encoded)
+
+    def test_b58encode_check(self):
+        for hexa, encoded in b58chk:
+            self.assertEqual(b58encode_check(unhexlify(hexa)), encoded)
+
+    def test_b58decode(self):
+        for hexa, encoded in b58:
+            self.assertEqual(hexlify(b58decode(encoded)).decode(), hexa)
+
+    def test_b58decode_check(self):
+        for hexa, encoded in b58chk:
+            self.assertEqual(hexlify(b58decode_check(encoded)).decode(), hexa)
+
+
+class TestSegwitHashes(unittest.TestCase):
+
+    def test_hashes(self):
+        for tx in segwit_hashes:
+            parsed = Transaction.unhexlify(tx['tx'])
+            self.assertEqual(parsed.txid, tx['txid'])
+            self.assertEqual(parsed.hash(), tx['hash'])
+
+
+class TestUnknownScript(unittest.TestCase):
+
+    def test(self):
+        for script in unknownscripts:
+            result = ScriptBuilder.identify(unhexlify(script['hex']))
+            self.assertTrue(isinstance(result, UnknownScript))
+            self.assertEqual(result.hexlify(), script['hex'])
+            self.assertEqual(str(result), script['asm'])
 
 
 class TestPrivPubHashAddrP2pkhSegwit(unittest.TestCase):
-    
+
     def test(self):
         for data in priv_pub_hash_addr_p2pkh_segwit:
             priv = PrivateKey.from_wif(data['privkey'])
@@ -60,7 +108,7 @@ class TestPrivPubHashAddrP2pkhSegwit(unittest.TestCase):
             address = Address.from_string(data['address'], check_network=False)
             p2pkhhex = data['scriptpubkey']
             segwit_addr = data['segwit']
-            
+
             self.assertEqual(priv.pub(), pub)
             self.assertEqual(pub.hash(), pubhash)
             self.assertEqual(address.hash, pubhash)
@@ -71,10 +119,10 @@ class TestPrivPubHashAddrP2pkhSegwit(unittest.TestCase):
             self.assertEqual(str(P2shScript(P2wpkhV0Script(pubhash)).address()), segwit_addr)
             self.assertEqual(P2shScript(P2wpkhV0Script(pub)).scripthash, Address.from_string(segwit_addr).hash)
             self.assertEqual(P2shScript(P2wpkhV0Script(pubhash)).scripthash, Address.from_string(segwit_addr).hash)
-    
+
 
 class TestNormalizedId(unittest.TestCase):
-    
+
     def test(self):
         for tx1, tx2 in malleated_txs:
             tx1 = Transaction.unhexlify(tx1)
@@ -84,7 +132,7 @@ class TestNormalizedId(unittest.TestCase):
 
 
 class TestHD(unittest.TestCase):
-        
+
     def test_hd(self):
         masterpriv = None
         for data in hd_keys:
@@ -98,7 +146,7 @@ class TestHD(unittest.TestCase):
             derived = masterpriv.derive(data['path'])
             self.assertEqual(derived.encode(mainnet=True), data['prv'])
             self.assertEqual(derived.pub().encode(mainnet=True), data['pub'])
-            
+
     def test_priv_pub(self):
         masterpub = ExtendedPublicKey.decode(hd_keys[0]['pub'], check_network=False)
         masterpriv = ExtendedPublicKey.decode(hd_keys[0]['prv'], check_network=False)
@@ -125,42 +173,42 @@ class TestBlock(unittest.TestCase):
             unhex_block = Block.unhexlify(valid_blocks[i]['raw'])
             serial_block = unhex_block.serialize()
             self.assertEqual(valid_blocks[i]['raw'], hexlify(serial_block).decode())
-        
+
     def test_block_hash(self):
         for i in range(len(valid_blocks)):
             unhex_block = Block.unhexlify(valid_blocks[i]['raw'])
             self.assertEqual(valid_blocks[i]['hash'], unhex_block.hash())
-        
+
     def test_block_header(self):
         for i in range(len(valid_blocks)):
             unhex_block = Block.unhexlify(valid_blocks[i]['raw'])
             unhex_header = BlockHeader.unhexlify(valid_blocks[i]['raw'])
             self.assertEqual(hexlify(unhex_block.header.serialize()), hexlify(unhex_header.serialize()))
-        
+
     def test_fail_block_deserialize_serialize(self):
         for i in range(len(valid_blocks)):
             unhex_block = Block.unhexlify(invalid_blocks[i]['raw'])
             serial_block = unhex_block.serialize()
             self.assertNotEqual(valid_blocks[i]['raw'], hexlify(serial_block).decode())
-        
+
     def test_fail_block_hash(self):
         for i in range(len(valid_blocks)):
             unhex_block = Block.unhexlify(invalid_blocks[i]['raw'])
             self.assertNotEqual(valid_blocks[i]['hash'], unhex_block.hash())
-        
+
     def test_fail_block_header(self):
         for i in range(len(valid_blocks)):
             unhex_block = Block.unhexlify(valid_blocks[i]['raw'])
             unhex_header = BlockHeader.unhexlify(invalid_blocks[i]['raw'])
             self.assertNotEqual(hexlify(unhex_block.header.serialize()), hexlify(unhex_header.serialize()))
-        
+
     def test_stop_iteration(self):
         for i in range(len(short_blocks)):
             with self.assertRaises(StopIteration):
                 Block.unhexlify(short_blocks[i]['raw'])
             with self.assertRaises(StopIteration):
                 Block.unhexlify(short_blocks[i]['raw']).serialize()
-        
+
     def test_empty_deserialized_string(self):
         for i in range(len(valid_blocks)):
             parser = BlockParser(bytearray(unhexlify(valid_blocks[i]['raw'])))
@@ -168,7 +216,7 @@ class TestBlock(unittest.TestCase):
             parser.get_txns()
             with self.assertRaises(StopIteration):
                 parser >> 1
-        
+
     def test_incomplete_parsing_exception(self):
         for i in range(len(valid_blocks)):
             aug_raw = valid_blocks[i]['raw'] + "ff"
@@ -177,7 +225,7 @@ class TestBlock(unittest.TestCase):
 
 
 class TestTransaction(unittest.TestCase):
-    
+
     def test_serialization(self):
         for data in transactions:
             tx = Transaction.unhexlify(data['raw'])
@@ -191,14 +239,19 @@ class TestTransaction(unittest.TestCase):
 
     def test_script(self):
         for key, value in scripts.items():
+            self.assertEqual(eval(value['code']).hexlify(), value['hex'])
+            self.assertEqual(str(eval(value['code'])), value['asm'])
+            parsed_script = Script.unhexlify(value['hex'])
+            self.assertEqual(parsed_script.hexlify(), value['hex'])
+            self.assertEqual(str(parsed_script), value['asm'])
             parsed_script = ScriptBuilder.identify(value['hex'])
             self.assertEqual(parsed_script.hexlify(), value['hex'])
-            self.assertEqual(eval(value['code']).hexlify(), value['hex'])
+            self.assertEqual(str(parsed_script), value['asm'])
             self.assertEqual(parsed_script.type, value['type'])
 
 
 class TestSegWitAddress(unittest.TestCase):
-    
+
     def test_valid(self):
         for data in segwit_valid_addresses:
             address = SegWitAddress.from_string(data['address'], check_network=False)
@@ -208,19 +261,40 @@ class TestSegWitAddress(unittest.TestCase):
                 self.assertEqual(P2wpkhV0Script(address), script)
             elif len(data['script']) == 68:
                 self.assertEqual(P2wshV0Script(address), script)
-            
+
     def test_invalid(self):
         for address in segwit_invalid_addresses:
             with self.assertRaises(CouldNotDecode):
                 print(SegWitAddress.from_string(address, check_network=False))
-            
+
+
+class TestSegwitOverP2sh(unittest.TestCase):
+
+    def test_p2wpkh_over_p2sh(self):
+        for spend in p2wpkh_over_p2sh:
+            pubkey = PublicKey.unhexlify(spend['pubkey'])
+            self.assertEqual(str(P2shAddress.from_script(P2wpkhScript.get(spend['witness_version'])(pubkey),
+                                                         mainnet=True)),
+                             spend['address'])
+            self.assertEqual(P2wpkhScript.get(spend['witness_version'])(pubkey).hexlify(), spend['redeem_script'])
+            self.assertEqual(str(P2shScript(P2wpkhScript.get(spend['witness_version'])(pubkey))), spend['script_pubkey'])
+
+    def test_p2wsh_over_p2sh(self):
+        for spend in p2wsh_over_p2sh:
+            wit_script = ScriptBuilder.identify(spend['witness_script'])
+            self.assertEqual(str(P2shScript(P2wshScript.get(spend['witness_version'])(wit_script))), spend['script_pubkey'])
+            self.assertEqual(P2wshScript.get(spend['witness_version'])(wit_script).hexlify(), spend['redeem_script'])
+            self.assertEqual(str(P2shAddress.from_script(P2wshScript.get(spend['witness_version'])(wit_script),
+                                                         mainnet=True)),
+                             spend['address'])
+
 
 class TestReplace(unittest.TestCase):
 
     def test_success(self):
         for transaction in transactions:
             tx = MutableTransaction.unhexlify(transaction['raw'])
-            self.assertFalse(tx.is_replaceable())
+            self.assertEqual(tx.is_replaceable(), transaction['replaceable'])
             if len(tx.ins) > 2:
                 tx.ins[1].sequence = Sequence(0xfffffffd)
                 self.assertTrue(tx.ins[1].is_replaceable())
@@ -279,30 +353,29 @@ class TestStackData(unittest.TestCase):
         ints = list(range(1001)) + ints
         for x in ints:
             self.assertTrue(int(StackData.from_int(x)) == x)
-            
-            
+
+
 class TestKeys(unittest.TestCase):
-    
+
     def test_priv_to_pubhash(self):
         for priv, addr, _ in privk['derivations']:
             self.assertEqual(str(PrivateKey.from_wif(priv).pub().to_address(mainnet=False)),
                              addr)
             self.assertEqual(PrivateKey.from_wif(priv).pub().hash(),
                              Address.from_string(addr, check_network=False).hash)
-            
+
     def test_derivation(self):
         m = ExtendedPrivateKey.decode(privk['master'])
         for priv, _, path in privk['derivations']:
             self.assertEqual(m.derive(path).key, PrivateKey.from_wif(priv))
-            
+
     def test_to_wif(self):
-        vectors = get_data('wif')
-        for v in vectors:
-            self.assertEqual(PrivateKey.from_wif(v['wif'], check_network=False).hexlify(), v['hex'])
-            priv = PrivateKey.unhexlify(v['hex'])
-            if not v['compressed']:
+        for w in wif:
+            self.assertEqual(PrivateKey.from_wif(w['wif'], check_network=False).hexlify(), w['hex'])
+            priv = PrivateKey.unhexlify(w['hex'])
+            if not w['compressed']:
                 priv.public_compressed = False
-            self.assertEqual(priv.to_wif(v['mainnet']), v['wif'])
+            self.assertEqual(priv.to_wif(w['mainnet']), w['wif'])
 
 
 class TestPubkey(unittest.TestCase):
@@ -479,7 +552,7 @@ class TestP2sh(unittest.TestCase):
         self.redeem_script = P2pkhScript(PublicKey.unhexlify('0384478d41e71dc6c3f9edde0f928a47d1b724c'
                                                              '05984ebfb4e7d0422e80abe95ff'))
         self.as_data = StackData.from_bytes(self.redeem_script.p2sh_hash())
-        self.address = self.redeem_script.to_address()
+        self.address = P2shAddress.from_script(self.redeem_script)
 
     def test_success_hash(self):
         script = P2shScript(self.redeem_script.p2sh_hash())
@@ -500,7 +573,7 @@ class TestP2sh(unittest.TestCase):
             from_addr = P2shScript(Address.from_string(address))
             from_script = P2shScript(script)
             self.assertTrue(str(from_addr.address()) == address)
-            self.assertTrue(str(script.to_address()) == address)
+            self.assertTrue(str(P2shAddress.from_script(script)) == address)
             self.assertTrue(str(from_script.address()) == address)
 
         script = P2shScript(self.address)
@@ -735,15 +808,15 @@ class TestAddress(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.good_addresses = {('mainnet', 'p2pkh', '1KKKK6N21XKo48zWKuQKXdvSsCf95ibHFa',
+        self.good_addresses = {('mainnet', P2pkhAddress, '1KKKK6N21XKo48zWKuQKXdvSsCf95ibHFa',
                                 b'\xc8\xe9\t\x96\xc7\xc6\x08\x0e\xe0b\x84`\x0chN\xd9\x04\xd1L\\'),
-                               ('testnet', 'p2pkh', 'mtH6FLMQNu2fFQ4mrb7UjEUjTAhUNCMFoi',
+                               ('testnet', P2pkhAddress, 'mtH6FLMQNu2fFQ4mrb7UjEUjTAhUNCMFoi',
                                 b'\x8b\xfas]\x98\xabb\x1e\xdbOw\xd7\xb7\xfe\nK\x1f\xfc\xc0$'),
-                               ('testnet', 'p2pkh', 'n3wEvhujG7SDcgeKCXZMrty5QqhQZ7f6jW',
+                               ('testnet', P2pkhAddress, 'n3wEvhujG7SDcgeKCXZMrty5QqhQZ7f6jW',
                                 b'\xf5\xea\xa2K\x82\xc8\x1f4L\x9a\x16\xa8\xfb\x84t\xe1\x10\xfd\xb1\xc3'),
-                               ('mainnet', 'p2sh', '3P14159f73E4gFr7JterCCQh9QjiTjiZrG',
+                               ('mainnet', P2shAddress, '3P14159f73E4gFr7JterCCQh9QjiTjiZrG',
                                 b'\xe9\xc3\xdd\x0c\x07\xaa\xc7ay\xeb\xc7jlx\xd4\xd6|l\x16\n'),
-                               ('testnet', 'p2sh', '2N6JFaB5rMtPwutovP6cirwBVxHuAVaHvMG',
+                               ('testnet', P2shAddress, '2N6JFaB5rMtPwutovP6cirwBVxHuAVaHvMG',
                                 b'\x8f,4\xa2<F\xe9\x80\xb7\x9e\x10\x9b\x11\xa2\xc8-9\x92\xeb\x95')}
         self.bad_addresses = {'vioqwV3F4YzpgnfyUukGVMB3Hv83ujehKCiGWyrYyx2Z7hiKQy7SWUV9KgfMdV9J',
                               'bc1a',
@@ -754,7 +827,7 @@ class TestAddress(unittest.TestCase):
         for net, addr_type, address, hashed_data in self.good_addresses:
             from_string = Address.from_string(address, check_network=False)
             self.assertTrue(address == str(from_string))
-            self.assertTrue(from_string.type == addr_type)
+            self.assertTrue(from_string.__class__ == addr_type)
             self.assertTrue(from_string.network == net)
             self.assertTrue(from_string.hash == hashed_data)
 
@@ -762,14 +835,14 @@ class TestAddress(unittest.TestCase):
         for address in self.bad_addresses:
             with self.assertRaises(ValueError):
                 Address.from_string(address, check_network=False)
-            
+
     def test_conversions(self):
         for address, pkh in addresses:
             self.assertEqual(hexlify(Address.from_string(address, check_network=False).hash).decode(), pkh)
             self.assertEqual(str(P2pkhScript(bytearray(unhexlify(pkh))).address(mainnet=True)), address)
             self.assertEqual(P2pkhScript(Address.from_string(address, check_network=False)).pubkeyhash,
                              bytearray(unhexlify(pkh)))
-            self.assertEqual(Address('p2pkh', bytearray(unhexlify(pkh)), mainnet=True).hash, bytearray(unhexlify(pkh)))
+            self.assertEqual(P2pkhAddress(bytearray(unhexlify(pkh)), mainnet=True).hash, bytearray(unhexlify(pkh)))
 
 
 class TestStandardness(unittest.TestCase):
@@ -838,7 +911,7 @@ class TestStandardness(unittest.TestCase):
         txin = TxIn('4a0884b0aa0c3d34a81ea747aca1368effd9359d573f79873d2d6b4045e49205',
                     9,
                     script_sig,
-                    0xffffffff)
+                    Sequence(0xffffffff))
         self.assertTrue(txin.is_standard(prev_script))
 
         # 14 sigops redeem script
@@ -851,7 +924,7 @@ class TestStandardness(unittest.TestCase):
         txin = TxIn('4a0884b0aa0c3d34a81ea747aca1368effd9359d573f79873d2d6b4045e49205',
                     9,
                     script_sig,
-                    0xffffffff)
+                    Sequence(0xffffffff))
         self.assertTrue(txin.is_standard(prev_script))
 
     def test_txin_fail(self):
@@ -865,7 +938,7 @@ class TestStandardness(unittest.TestCase):
         txin = TxIn('4a0884b0aa0c3d34a81ea747aca1368effd9359d573f79873d2d6b4045e49205',
                     9,
                     script_sig,
-                    0xffffffff)
+                    Sequence(0xffffffff))
         self.assertFalse(txin.is_standard(prev_script))
 
         # nonstandard prev_script
@@ -878,7 +951,7 @@ class TestStandardness(unittest.TestCase):
         txin = TxIn('4a0884b0aa0c3d34a81ea747aca1368effd9359d573f79873d2d6b4045e49205',
                     9,
                     script_sig,
-                    0xffffffff)
+                    Sequence(0xffffffff))
         self.assertFalse(txin.is_standard(prev_script))
 
     def test_tx_success(self):
@@ -914,7 +987,7 @@ class TestSegwitSigs(unittest.TestCase):
         for tx in self.data:
             unsigned = SegWitTransaction.unhexlify(tx['unsigned_tx'])
             self.assertEqual(unsigned._hash_outputs(), bytearray(unhexlify(tx['hash_outputs'])))
-            
+
     def test_digest_preimage(self):
         for tx in self.data:
             unsigned = SegWitTransaction.unhexlify(tx['unsigned_tx'])

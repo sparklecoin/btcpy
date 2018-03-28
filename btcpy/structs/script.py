@@ -9,7 +9,6 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE.md file.
 
-import re
 import json
 import hashlib
 from hashlib import sha256
@@ -18,9 +17,9 @@ from abc import ABCMeta, abstractmethod
 
 from ..lib.types import HexSerializable, Immutable, cached
 from ..lib.parsing import ScriptParser, Parser, Stream, UnexpectedOperationFound
+from ..lib.opcodes import OpCodeConverter
 from .crypto import WrongPubKeyFormat
-from .address import Address, SegWitAddress
-from ..setup import is_mainnet
+from .address import P2pkhAddress, P2shAddress, P2wpkhAddress, P2wshAddress
 
 
 class WrongScriptTypeException(Exception):
@@ -51,13 +50,10 @@ class StackData(Immutable, HexSerializable):
     @classmethod
     def from_bytes(cls, bytes_):
         data_len = len(bytes_)
-
         if data_len == 0:
             return cls.zero()
 
         if data_len == 1:
-            if bytes_[0] == 0:
-                raise ValueError('Trying to push byte 0x00 with a literal byte instead of empty array')
             if 1 <= bytes_[0] <= 16:
                 return cls(bytearray([80 + bytes_[0]]))
 
@@ -74,7 +70,7 @@ class StackData(Immutable, HexSerializable):
                 size = 4
             else:
                 raise ValueError('Data length too big to push: {} bytes'.format(data_len))
-            return cls(bytearray([Script.opcode_to_int['OP_PUSHDATA{}'.format(size)]])
+            return cls(bytearray([OpCodeConverter.to_int('OP_PUSHDATA{}'.format(size))])
                        + bytearray(data_len.to_bytes(size, 'little')),
                        bytes_)
 
@@ -167,18 +163,23 @@ class StackData(Immutable, HexSerializable):
         object.__setattr__(self, 'data', bytearray(data))
 
     def __str__(self):
-        if not self.data:
+        if self.push_op[0] == 0 or 81 <= self.push_op[0] <= 96:
             if self.push_op[0] == 0:
                 return ''
             else:
-                return BaseScript.int_to_opcode[self.push_op[0]]
+                return OpCodeConverter.from_int(self.push_op[0])
+        if not self.data:
+            return '00'
         return hexlify(self.data).decode()
 
     def __len__(self):
-        if not self.data:
+        if self.push_op[0] == 0 or 81 <= self.push_op[0] <= 96:
             # OP_0 to OP_16
             return 1
         return len(self.data)
+
+    def __bool__(self):
+        return len(self) != 0
 
     def __int__(self):
 
@@ -204,134 +205,18 @@ class StackData(Immutable, HexSerializable):
             if self.push_op[0] == 0:
                 return Parser.to_varint(0) + bytearray()
             else:
-                return Parser.to_varint(1) + bytearray([self.push_op[0] - 80])
+                if self.push_op[0] in (79, 80):
+                    return Parser.to_varint(1) + bytearray([(self.push_op[0])])
+                elif self.push_op[0] in (81, 96):
+                    return Parser.to_varint(1) + bytearray([(self.push_op[0] - 80)])
+                elif self.push_op[0] in range(76, 79):
+                    return self.push_op
+                else:  # 1-75
+                    return self.push_op
 
 
 # noinspection PyUnresolvedReferences
 class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
-
-    opcodes = [('OP_0', 0),
-               ('OP_PUSHDATA1', 76),
-               ('OP_PUSHDATA2', 77),
-               ('OP_PUSHDATA4', 78),
-               ('OP_1NEGATE', 79),
-               ('OP_RESERVED', 80),
-               ('OP_1', 81),
-               ('OP_2', 82),
-               ('OP_3', 83),
-               ('OP_4', 84),
-               ('OP_5', 85),
-               ('OP_6', 86),
-               ('OP_7', 87),
-               ('OP_8', 88),
-               ('OP_9', 89),
-               ('OP_10', 90),
-               ('OP_11', 91),
-               ('OP_12', 92),
-               ('OP_13', 93),
-               ('OP_14', 94),
-               ('OP_15', 95),
-               ('OP_16', 96),
-               ('OP_NOP', 97),
-               ('OP_VER', 98),
-               ('OP_IF', 99),
-               ('OP_NOTIF', 100),
-               ('OP_VERIF', 101),
-               ('OP_VERNOTIF', 102),
-               ('OP_ELSE', 103),
-               ('OP_ENDIF', 104),
-               ('OP_VERIFY', 105),
-               ('OP_RETURN', 106),
-               ('OP_TOALTSTACK', 107),
-               ('OP_FROMALTSTACK', 108),
-               ('OP_2DROP', 109),
-               ('OP_2DUP', 110),
-               ('OP_3DUP', 111),
-               ('OP_2OVER', 112),
-               ('OP_2ROT', 113),
-               ('OP_2SWAP', 114),
-               ('OP_IFDUP', 115),
-               ('OP_DEPTH', 116),
-               ('OP_DROP', 117),
-               ('OP_DUP', 118),
-               ('OP_NIP', 119),
-               ('OP_OVER', 120),
-               ('OP_PICK', 121),
-               ('OP_ROLL', 122),
-               ('OP_ROT', 123),
-               ('OP_SWAP', 124),
-               ('OP_TUCK', 125),
-               ('OP_CAT', 126),
-               ('OP_SUBSTR', 127),
-               ('OP_LEFT', 128),
-               ('OP_RIGHT', 129),
-               ('OP_SIZE', 130),
-               ('OP_INVERT', 131),
-               ('OP_AND', 132),
-               ('OP_OR', 133),
-               ('OP_XOR', 134),
-               ('OP_EQUAL', 135),
-               ('OP_EQUALVERIFY', 136),
-               ('OP_RESERVED1', 137),
-               ('OP_RESERVED2', 138),
-               ('OP_1ADD', 139),
-               ('OP_1SUB', 140),
-               ('OP_2MUL', 141),
-               ('OP_2DIV', 142),
-               ('OP_NEGATE', 143),
-               ('OP_ABS', 144),
-               ('OP_NOT', 145),
-               ('OP_0NOTEQUAL', 146),
-               ('OP_ADD', 147),
-               ('OP_SUB', 148),
-               ('OP_MUL', 149),
-               ('OP_DIV', 150),
-               ('OP_MOD', 151),
-               ('OP_LSHIFT', 152),
-               ('OP_RSHIFT', 153),
-               ('OP_BOOLAND', 154),
-               ('OP_BOOLOR', 155),
-               ('OP_NUMEQUAL', 156),
-               ('OP_NUMEQUALVERIFY', 157),
-               ('OP_NUMNOTEQUAL', 158),
-               ('OP_LESSTHAN', 159),
-               ('OP_GREATERTHAN', 160),
-               ('OP_LESSTHANOREQUAL', 161),
-               ('OP_GREATERTHANOREQUAL', 162),
-               ('OP_MIN', 163),
-               ('OP_MAX', 164),
-               ('OP_WITHIN', 165),
-               ('OP_RIPEMD160', 166),
-               ('OP_SHA1', 167),
-               ('OP_SHA256', 168),
-               ('OP_HASH160', 169),
-               ('OP_HASH256', 170),
-               ('OP_CODESEPARATOR', 171),
-               ('OP_CHECKSIG', 172),
-               ('OP_CHECKSIGVERIFY', 173),
-               ('OP_CHECKMULTISIG', 174),
-               ('OP_CHECKMULTISIGVERIFY', 175),
-               ('OP_NOP1', 176),
-               ('OP_NOP2', 177),
-               ('OP_CHECKLOCKTIMEVERIFY', 177),
-               ('OP_NOP3', 178),
-               ('OP_CHECKSEQUENCEVERIFY', 178),
-               ('OP_NOP4', 179),
-               ('OP_NOP5', 180),
-               ('OP_NOP6', 181),
-               ('OP_NOP7', 182),
-               ('OP_NOP8', 183),
-               ('OP_NOP9', 184),
-               ('OP_NOP10', 185),
-               ('OP_NULLDATA', 252),
-               ('OP_PUBKEYHASH', 253),
-               ('OP_PUBKEY', 254),
-               ('OP_INVALIDOPCODE', 255), ]
-
-    opcode_to_int = {op: num for op, num in opcodes}
-    int_to_opcode = {num: op for op, num in opcodes}
-    opcode_to_hex = {op: format(num, '02x') for op, num in opcodes}
-    hex_to_opcode = {format(num, '02x'): op for op, num in opcodes}
 
     # noinspection PyMethodOverriding
     @classmethod
@@ -341,7 +226,7 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
 
     @classmethod
     def unhexlify(cls, hex_string):
-        return cls(Script(bytearray(unhexlify(hex_string))))
+        return cls(bytearray(unhexlify(hex_string)))
 
     @staticmethod
     def compile(string):
@@ -349,8 +234,8 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
         opcodes = string.split(' ')
         for opcode in opcodes:
             try:
-                result << Script.opcode_to_int[opcode]
-            except KeyError:
+                result << OpCodeConverter.to_int(opcode)
+            except ValueError:
                 result << StackData.unhexlify(opcode).to_push_op()
         return result.serialize()
 
@@ -369,11 +254,11 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
     def __eq__(self, other):
         return self.body == other.body
 
-    def serialize(self):
-        return self.body
-
     def __iter__(self):
         return iter(self.decompile().split())
+
+    def serialize(self):
+        return self.body
 
     @cached
     def decompile(self):
@@ -384,11 +269,16 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
         while parser:
             op = next(parser)
             if 1 <= op <= 78:  # pushdata
-                opcodes.append(parser.get_push(op))
+                try:
+                    pushed_data = parser.get_push(op)
+                except WrongPushDataOp:
+                    opcodes.append('[error]')
+                    break
+                opcodes.append(pushed_data)
             else:
                 try:
-                    opcodes.append(Script.int_to_opcode[op])
-                except KeyError:
+                    opcodes.append(OpCodeConverter.from_int(op))
+                except ValueError:
                     raise ValueError('Invalid opcode {} in script {}'.format(op, self.hexlify()))
 
         return ' '.join(str(opcode) for opcode in opcodes)
@@ -407,8 +297,8 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
                 if lastop is None:
                     # OP_CHECKMULTISIG(VERIFY) is the first op of the script. This means the script is invalid
                     return 0
-                if Script.opcode_to_int['OP_1'] <= Script.opcode_to_int[lastop] <= Script.opcode_to_int['OP_16']:
-                    sigops += Script.opcode_to_int[lastop] - 80
+                if OpCodeConverter.to_int('OP_1') <= OpCodeConverter.to_int(lastop) <= OpCodeConverter.to_int('OP_16'):
+                    sigops += OpCodeConverter.to_int(lastop) - 80
             lastop = op
         return sigops
 
@@ -421,9 +311,9 @@ class BaseScript(Immutable, HexSerializable, metaclass=ABCMeta):
     def is_push_only(self):
         for op in self:
             try:
-                if Script.opcode_to_int[op] > Script.opcode_to_int['OP_16']:
+                if OpCodeConverter.to_int(op) > OpCodeConverter.to_int('OP_16'):
                     return False
-            except KeyError:
+            except ValueError:
                 continue
         return True
 
@@ -508,8 +398,17 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
     template = None
 
     @classmethod
+    def unhexlify(cls, hex_string):
+        if cls is ScriptPubKey:
+            return cls(bytearray(unhexlify(hex_string)))
+        else:
+            return cls(Script(bytearray(unhexlify(hex_string))))
+
+    @classmethod
     def verify(cls, bytes_):
         parser = ScriptParser(bytes_)
+        if not bytes_:
+            raise WrongScriptTypeException('Empty script')
         try:
             args = [data for data in parser.match(cls.template)]
         except UnexpectedOperationFound as exc:
@@ -527,7 +426,7 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
         result = {'asm': str(self),
                   'hex': self.hexlify(),
                   'type': self.type}
-        if self.address is not None:
+        if self.address() is not None:
             result['address'] = str(self.address())
         return result
 
@@ -548,12 +447,6 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
     @cached
     def to_stack_data(self):
         return StackData.from_bytes(self.serialize())
-
-    def to_address(self, segwit_version=None):
-        if segwit_version is not None:
-            return SegWitAddress('p2wsh', self.p2wsh_hash(), segwit_version, is_mainnet())
-        else:
-            return Address('p2sh', self.p2sh_hash(), is_mainnet())
 
     def is_standard(self):
         """Subclasses which have standard types should reimplement this method"""
@@ -591,9 +484,7 @@ class P2pkhScript(ScriptPubKey):
             object.__setattr__(self, 'pubkeyhash', param.hash())
         elif isinstance(param, bytearray):
             object.__setattr__(self, 'pubkeyhash', param)
-        elif isinstance(param, Address):
-            if param.type != self.type:
-                raise ValueError('Non-p2pkh address provided. Address type: {}'.format(param.type))
+        elif isinstance(param, P2pkhAddress):
             object.__setattr__(self, 'pubkeyhash', param.hash)
         else:
             raise TypeError('Wrong type for P2pkhScript __init__: {}'.format(type(param)))
@@ -608,24 +499,46 @@ class P2pkhScript(ScriptPubKey):
         return 'p2pkh'
 
     def address(self, mainnet=None):
-        return Address('p2pkh', self.pubkeyhash, mainnet)
+        return P2pkhAddress.from_script(self, mainnet)
 
     def is_standard(self):
         return True
 
 
-class P2wpkhV0Script(P2pkhScript):
+class SegWitScript(ScriptPubKey, metaclass=ABCMeta):
+
+    @staticmethod
+    @abstractmethod
+    def get_version():
+        raise NotImplemented
+
+
+class P2wpkhScript(P2pkhScript, SegWitScript, metaclass=ABCMeta):
+
+    @staticmethod
+    def get(segwit_version):
+        for cls in P2wpkhScript.__subclasses__():
+            if cls.get_version() == segwit_version:
+                return cls
+        raise ValueError('Undefined version: {}'.format(segwit_version))
+
+    def address(self, mainnet=None):
+        return P2wpkhAddress.from_script(self, mainnet)
+
+
+class P2wpkhV0Script(P2wpkhScript):
 
     template = 'OP_0 <20>'
 
     compile_fmt = 'OP_0 {}'
 
+    @staticmethod
+    def get_version():
+        return 0
+
     def __init__(self, param):
-        if isinstance(param, SegWitAddress):
-            if param.type != 'p2wpkh':
-                raise ValueError('Non-p2wpkh address provided. Address type: {}'.format(param.type))
-            else:
-                param = param.hash
+        if isinstance(param, P2wpkhAddress):
+            param = param.hash
 
         super().__init__(param)
 
@@ -636,20 +549,8 @@ class P2wpkhV0Script(P2pkhScript):
     def type(self):
         return 'p2wpkhv0'
 
-    def address(self, mainnet=None):
-        return SegWitAddress('p2wpkh', self.pubkeyhash, 0)
-
     def get_scriptcode(self):
         return P2pkhScript(self.pubkeyhash).to_stack_data()
-
-
-class P2wpkhScript(ScriptPubKey, metaclass=ABCMeta):
-
-    versions = {0: P2wpkhV0Script}
-
-    @classmethod
-    def get(cls, segwit_version):
-        return cls.versions[segwit_version]
 
 
 # noinspection PyUnresolvedReferences
@@ -675,9 +576,7 @@ class P2shScript(ScriptPubKey):
 
         if isinstance(param, ScriptPubKey):
             object.__setattr__(self, 'scripthash', param.p2sh_hash())
-        elif isinstance(param, Address):
-            if param.type != self.type:
-                raise ValueError('Non-p2sh address provided. Address type: {}'.format(param.type))
+        elif isinstance(param, P2shAddress):
             object.__setattr__(self, 'scripthash', param.hash)
         elif isinstance(param, bytearray):
             object.__setattr__(self, 'scripthash', param)
@@ -696,29 +595,42 @@ class P2shScript(ScriptPubKey):
     def is_standard(self):
         return True
 
-    def address(self):
-        return Address('p2sh', self.scripthash)
+    def address(self, mainnet=None):
+        return P2shAddress.from_script(self, mainnet)
 
-    def to_address(self, segwit_version=None):
-        return self.address()
+
+class P2wshScript(P2shScript, SegWitScript, metaclass=ABCMeta):
+
+    @staticmethod
+    def get(segwit_version):
+        for cls in P2wshScript.__subclasses__():
+            if cls.get_version() == segwit_version:
+                return cls
+        raise ValueError('Undefined version: {}'.format(segwit_version))
+
+    def address(self, mainnet=None):
+        return P2wshAddress.from_script(self, mainnet)
 
 
 # noinspection PyUnresolvedReferences
-class P2wshV0Script(P2shScript):
+class P2wshV0Script(P2wshScript):
 
     template = 'OP_0 <32>'
 
     compile_fmt = 'OP_0 {}'
 
+    @staticmethod
+    def get_version():
+        return 0
+
     def __init__(self, param):
+        if isinstance(param, P2wpkhScript):
+            raise ValueError("Can't embed P2WPKH script in P2WSH format")
         # segwit p2wsh have different hashing method than regular p2sh scripts!
         if isinstance(param, ScriptPubKey):
             param = param.p2wsh_hash()
-        if isinstance(param, SegWitAddress):
-            if param.type != 'p2wsh':
-                raise ValueError('Non-p2wsh address provided. Address type: {}'.format(param.type))
-            else:
-                param = param.hash
+        if isinstance(param, P2wshAddress):
+            param = param.hash
 
         super().__init__(param)
 
@@ -728,23 +640,6 @@ class P2wshV0Script(P2shScript):
     @property
     def type(self):
         return 'p2wshv0'
-
-    def address(self):
-        return SegWitAddress('p2wsh', self.scripthash, 0)
-
-    def to_address(self, segwit_version=None):
-        if segwit_version is not None:
-            raise ValueError("Can't request p2wsh address of p2wsh script")
-        return self.address()
-
-
-class P2wshScript(ScriptPubKey, metaclass=ABCMeta):
-
-    versions = {0: P2wshV0Script}
-
-    @classmethod
-    def get(cls, segwit_version):
-        return cls.versions[segwit_version]
 
 
 # noinspection PyUnresolvedReferences
@@ -817,6 +712,25 @@ class MultisigScript(ScriptPubKey):
 
     template = '<>+ OP_CHECKMULTISIG'
 
+    @classmethod
+    def verify(cls, bytes_):
+        from .crypto import PublicKey
+        parser = ScriptParser(bytes_)
+        if not bytes_:
+            raise WrongScriptTypeException('Empty script')
+        try:
+            push_ops = parser.match(cls.template)
+            if len(push_ops) <= 2:
+                raise WrongScriptTypeException('Less than 3 push ops before OP_CHECKMULTISIG')
+            m, *pubkeys, n = [data for data in push_ops]
+        except UnexpectedOperationFound as exc:
+            raise WrongScriptTypeException(str(exc))
+
+        if len(pubkeys) == 0 or len(pubkeys) != int(n):
+            raise WrongScriptTypeException('Non-matching N and number of pubkeys')
+
+        return [int(m), *[PublicKey(pubkey.data) for pubkey in pubkeys], int(n)]
+
     def __init__(self, *args):
         """
         :param args: if one arg is provided that is interpreted as a precompiled script which needs
@@ -824,7 +738,6 @@ class MultisigScript(ScriptPubKey):
         and `n` are extracted and saved.
         If more than one arg is provided, we assume that the parameters are `m, pubkey1, ..., pubkeyn, n`.
         """
-        from .crypto import PublicKey
 
         if len(args) == 0:
             raise TypeError('Wrong number of params for MultisigScript __init__: {}'.format(len(args)))
@@ -833,9 +746,6 @@ class MultisigScript(ScriptPubKey):
             script = args[0]
             super().__init__(script.body)
             m, *pubkeys, n = self.verify(script.body)
-            m = int(m)
-            pubkeys = [PublicKey(pk.data) for pk in pubkeys]
-            n = int(n)
         else:
             m, *pubkeys, n = args
 
@@ -884,7 +794,7 @@ class IfElseScript(ScriptPubKey):
             else_found = False
 
             try:
-                if parser[-1] != Script.opcode_to_int['OP_ENDIF']:
+                if parser[-1] != OpCodeConverter.to_int('OP_ENDIF'):
                     raise WrongScriptTypeException('Script is not OP_ENDIF terminated')
             except IndexError:
                 raise WrongScriptTypeException
@@ -893,15 +803,15 @@ class IfElseScript(ScriptPubKey):
             # print('################### Parsing IfElseScript ######################')
             for op in parser:
                 # print('Parsing op: {}'.format(op))
-                if op == Script.opcode_to_int['OP_IF']:
+                if op == OpCodeConverter.to_int('OP_IF'):
                     current_script << op
                     if_counter += 1
-                elif op == Script.opcode_to_int['OP_ENDIF']:
+                elif op == OpCodeConverter.to_int('OP_ENDIF'):
                     if_counter -= 1
                     if if_counter == -1:
                         break
                     current_script << op
-                elif op == Script.opcode_to_int['OP_ELSE']:
+                elif op == OpCodeConverter.to_int('OP_ELSE'):
                     if if_counter == 0:
                         # switch script
                         else_found = True
@@ -948,11 +858,11 @@ class IfElseScript(ScriptPubKey):
             if_script, else_script = args
             object.__setattr__(self, 'if_script', if_script)
             object.__setattr__(self, 'else_script', else_script)
-            super().__init__(bytearray([Script.opcode_to_int['OP_IF']]) +
+            super().__init__(bytearray([OpCodeConverter.to_int('OP_IF')]) +
                              self.if_script.serialize() +
-                             bytearray([Script.opcode_to_int['OP_ELSE']]) +
+                             bytearray([OpCodeConverter.to_int('OP_ELSE')]) +
                              self.else_script.serialize() +
-                             bytearray([Script.opcode_to_int['OP_ENDIF']]))
+                             bytearray([OpCodeConverter.to_int('OP_ENDIF')]))
         else:
             raise TypeError('Wrong number of params for IfElseScript __init__: {}'.format(len(args)))
 
@@ -976,7 +886,7 @@ class TimelockScript(ScriptPubKey):
             parser.require('OP_DROP')
             script = parser >> len(parser)
             return locktime, ScriptBuilder.identify(script, inner=True)
-        except (UnexpectedOperationFound, StopIteration) as exc:
+        except (UnexpectedOperationFound, StopIteration, IndexError) as exc:
             raise WrongScriptTypeException(str(exc))
 
     def __init__(self, *args):
@@ -1005,8 +915,8 @@ class TimelockScript(ScriptPubKey):
 
             script_body = Stream()
             script_body << self.locktime.for_script().to_push_op()
-            script_body << Script.opcode_to_int['OP_CHECKLOCKTIMEVERIFY']
-            script_body << Script.opcode_to_int['OP_DROP']
+            script_body << OpCodeConverter.to_int('OP_CHECKLOCKTIMEVERIFY')
+            script_body << OpCodeConverter.to_int('OP_DROP')
             script_body << self.locked_script
 
             super().__init__(script_body.serialize())
@@ -1057,8 +967,8 @@ class RelativeTimelockScript(ScriptPubKey):
             object.__setattr__(self, 'locked_script', locked_script)
             script_body = Stream()
             script_body << self.sequence.for_script().to_push_op()
-            script_body << Script.opcode_to_int['OP_CHECKSEQUENCEVERIFY']
-            script_body << Script.opcode_to_int['OP_DROP']
+            script_body << OpCodeConverter.to_int('OP_CHECKSEQUENCEVERIFY')
+            script_body << OpCodeConverter.to_int('OP_DROP')
             script_body << self.locked_script
 
             super().__init__(script_body.serialize())
@@ -1129,9 +1039,9 @@ class HashlockScript(ScriptPubKey):
                 lock_hash = StackData.from_bytes(lock_hash)
             object.__setattr__(self, 'hash', lock_hash)
             script_body = Stream()
-            script_body << Script.opcode_to_int[self.__class__.hash_op()]
+            script_body << OpCodeConverter.to_int(self.__class__.hash_op())
             script_body << self.hash.to_push_op()
-            script_body << Script.opcode_to_int['OP_EQUALVERIFY']
+            script_body << OpCodeConverter.to_int('OP_EQUALVERIFY')
             script_body << self.locked_script
             super().__init__(script_body.serialize())
         else:
@@ -1183,9 +1093,6 @@ class UnknownScript(ScriptPubKey):
     @property
     def type(self):
         return 'nonstandard'
-
-    def decompile(self):
-        return self.hexlify()
 
 
 class ScriptBuilder(object):
