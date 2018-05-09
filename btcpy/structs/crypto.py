@@ -44,6 +44,7 @@ class PrivateKey(Key):
 
         decoded = b58decode_check(wif)
         prefix, *rest = decoded
+        prefix = int('0x' + str(prefix),16)
 
         if prefix not in Constants.get('wif.prefixes').values():
             raise ValueError('Unknown private key prefix: {:02x}'.format(prefix))
