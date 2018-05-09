@@ -5,9 +5,9 @@ class Constants(object):
                                    'n': ('p2pkh', 'testnet'),
                                    '3': ('p2sh', 'mainnet'),
                                    '2': ('p2sh', 'testnet')},
-               'base58.raw_prefixes': {('mainnet', 'p2pkh'): bytearray(b'\x00'),
+               'base58.raw_prefixes': {('mainnet', 'p2pkh'): bytearray(b'\x37'),
                                        ('testnet', 'p2pkh'): bytearray(b'\x6f'),
-                                       ('mainnet', 'p2sh'): bytearray(b'\x05'),
+                                       ('mainnet', 'p2sh'): bytearray(b'\x2f'),
                                        ('testnet', 'p2sh'): bytearray(b'\xc4')},
                'bech32.net_to_hrp': {'mainnet': 'bc',
                                      'testnet': 'tb'},
@@ -16,7 +16,7 @@ class Constants(object):
                'xkeys.prefixes': {'mainnet': 'x', 'testnet': 't'},
                'xpub.version': {'mainnet': b'\x04\x88\xb2\x1e', 'testnet': b'\x04\x35\x87\xcf'},
                'xprv.version': {'mainnet': b'\x04\x88\xad\xe4', 'testnet': b'\x04\x35\x83\x94'},
-               'wif.prefixes': {'mainnet': 0x80, 'testnet': 0xef}}
+               'wif.prefixes': {'mainnet': 0xb7, 'testnet': 0xef}}
 
     @staticmethod
     def get(key):
