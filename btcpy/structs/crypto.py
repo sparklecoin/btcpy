@@ -36,7 +36,7 @@ class PrivateKey(Key):
     highest_s = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0
 
     @staticmethod
-    def from_wif(wif):
+    def from_wif(wif, check_network=True):
         '''Decode private_key from WIF.'''
 
         if not 51 <= len(wif) <= 52:

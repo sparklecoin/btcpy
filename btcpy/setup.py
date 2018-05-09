@@ -9,18 +9,21 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE.md file.
 
+symbol = {'ppc','btc'}
 networks = {'mainnet', 'testnet', 'regtest'}
 
+SYMBOL = None
 MAINNET = None
 NETNAME = None
 
 
-def setup(network='mainnet', force=False):
-    global MAINNET, NETNAME
+def setup(symbol = 'ppc', network='mainnet', force=False):
+    global SYMBOL, MAINNET, NETNAME
     if MAINNET is not None and NETNAME != network and not force:
         raise ValueError('Trying to change network type at runtime')
     if network not in networks:
         raise ValueError('Unknown network type: {}'.format(network))
+    SYMBOL = symbol
     MAINNET = (network == 'mainnet')
     NETNAME = network
 
