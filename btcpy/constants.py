@@ -1,13 +1,14 @@
 from .setup import SYMBOL
 class Constants:
     global SYMBOL
-    if SYMBOL is 'ppc':
-        m_p2pkh = bytearray(b'\x37')
-        t_p2pkh = bytearray(b'\x6f')
-        m_p2sh  = bytearray(b'\x75')
-        t_p2sh  = bytearray(b'\xc4')
-        m_wif   = 0xb7
-        t_wif   = 0xef
+    
+    m_p2pkh = bytearray(b'\x37')
+    t_p2pkh = bytearray(b'\x6f')
+    m_p2sh  = bytearray(b'\x75')
+    t_p2sh  = bytearray(b'\xc4')
+    m_wif   = 0xb7
+    t_wif   = 0xef
+
     if SYMBOL is 'btc':
         m_p2pkh = bytearray(b'\x00')
         t_p2pkh = bytearray(b'\x6f')
