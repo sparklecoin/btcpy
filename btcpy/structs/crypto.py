@@ -36,8 +36,7 @@ class PrivateKey(Key):
     highest_s = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0
 
     @staticmethod
-    def from_wif(wif):
-        '''Decode private_key from WIF.'''
+    def from_wif(wif, check_network=True):
 
         if not 51 <= len(wif) <= 52:
             raise ValueError('Invalid wif length: {}'.format(len(wif)))
@@ -52,9 +51,10 @@ class PrivateKey(Key):
             if prefix != Constants.get('wif.prefixes')['mainnet' if is_mainnet() else 'testnet']:
                 raise ValueError('{0} prefix in non-{0} environment'.format(net_name()))
 
-        b58_wif = b58decode_check(wif)
+        public_compressed = len(rest) == 33
+        privk = rest[0:32]
 
-        return PrivateKey(bytearray(b58_wif[1:33]))
+        return PrivateKey(bytearray(privk), public_compressed)
 
     @staticmethod
     def unhexlify(hexa):
