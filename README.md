@@ -15,6 +15,7 @@ Bitcoin scripts.
 a production environment. Also, as long as the version is 0.\*, API breaking changes
 should be expected**
 
+
 Table of Contents
 =================
 
@@ -26,7 +27,9 @@ Table of Contents
    * [What it does not do](#what-it-does-not-do)
    * [Structure](#structure)
    * [Usage examples](#usage-examples)
-      * [Network setup](#network-setup)
+      * [Setup](#setup)
+         * [Network](#network)
+         * [Strictness](#strictness)
       * [Parsing and serialization](#parsing-and-serialization)
       * [Keys](#keys)
          * [HD keys](#hd-keys)
@@ -47,6 +50,7 @@ Table of Contents
    * [Contributing and running tests](#contributing-and-running-tests)
    * [Roadmap to v1](#roadmap-to-v1)
    * [TODO](#todo)
+   * [Acknowledgements](#acknowledgements)
 
 
 # Requirements
@@ -101,9 +105,20 @@ interface, while objects located in `btcpy.lib` are used internally.
 
 # Usage examples
 
-## Network setup
-The first thing to do the first time this package is imported is to set the
-network on which it has to work. This is achieved by doing:
+## Setup
+The first thing to do the first time this package is imported is to set a global state which
+indicates on which network you are working and wether you want strict mode enabled.
+These two settings are further explained in the following sections.
+
+To setup `btcpy`, you can use the following function
+
+```python
+from btcpy.setup import setup
+setup('regtest', strict=True)
+```
+
+### Network
+You can setup the network you will work on by calling:
 
 ```python
 from btcpy.setup import setup
@@ -116,10 +131,35 @@ supported network types are:
     testnet
     mainnet
 
-The `btcpy.setup` module also provides the following functions:
+The `btcpy.setup` module also provides the following network-related functions:
 
     is_mainnet() - returns True if 'mainnet' was selected, False otherwise
     net_name()   - returns the value that was selected when calling setup()
+
+### Strictness
+`btcpy` never performs validation. However, we don't want you to inadvertently lose your funds
+for a mistake, so, in strict mode, when you do something that looks dangerous, the library
+always makes sure that you know exactly what you are doing.
+
+To setup the library in strict mode, you can run the setup as follows:
+
+```python
+setup(my_network, strict=True)  # True is actually the default for strict mode, the only other option is False
+```
+
+Additionally, you can force (non-)strictness on specific functions that have a `strict=None`
+as keyword argument. If the `strict` keyword argument is left to `None`, then the strictness
+specified in the `setup` will be followed, otherwise the param you pass to `strict` will be used.
+
+The following additional checks are done when in `strict` mode:
+* Do not allow to create `P2pkScript`s with public keys that have an invalid format (please note that
+during parsing such scripts will not even be recognised as scripts of type `'p2pk'`
+when strict mode is enabled, they will instead be recognised as of type `'nonstandard'`)
+* Do not allow to create m-of-n `MultisigScript`s with less than `m` public keys that have a valid format
+(please note that during parsing such scripts will not even be recognised as scripts of type `'multisig'`
+when strict mode is enabled, they will instead be recognised as of type `'nonstandard'`)
+* Do not allow to decode `ExtendedPublicKeys` or `ExtendedPrivateKeys` that don't match the network you set in `setup`
+* Do not allow to decode `Address`es that don't match the network you set in `setup`
     
 ## Parsing and serialization
 `Transaction`, `PublicKey`, `PrivateKey` and `Block` can be extracted
@@ -148,6 +188,10 @@ privk = PrivateKey.unhexlify(privk_hex)
 # pub.key holds a `PublicKey`
 >>> pub.key.hexlify()
 '025f628d7a11ace2a6379119a778240cb70d6e720750416bb36f824514fbe88260'
+```
+`PrivateKey` can also be extracted from a Wallet Import Format by doing:
+```python
+>>> privk = PrivateKey.form_wif(wif_key)
 ```
 
 All these structures can be converted back to hex by using their `hexlify()` method.
@@ -516,14 +560,14 @@ based on the minimum needed parameters. In the following sections we will show s
 examples of these features.
 
 The supported scripts can be created by using their constructor and passing them the
-needed parameters. All the constructors of these classes can take an input of type `Script`.
+needed parameters. They can be found in `btcpy.structs.script`. All the constructors of these classes can take an input of type `Script`.
 In this case they try to match it to their template and raise a `WrongScriptTypeException`
 if the script does not match the desired template. Otherwise, they take the following
 parameters:
 
 | Class                         | Description |Parameters      |
 | ----------------------------- | ----------- | -------------- |
-| `P2pkhscript`, `P2wpkhScript` | A P2PKH/P2WPKH script | Either a `PublickKey`, a `bytearray` representing a public key hash or an `Address`           |
+| `P2pkhScript`, `P2wpkhScript` | A P2PKH/P2WPKH script | Either a `PublickKey`, a `bytearray` representing a public key hash or an `Address`           |
 | `P2shScript`                  | A P2SH script  | Either a `ScriptPubKey` representing the redeemScript, a `bytearray` representing the redeemScript's hash or an `Address`   |
 | `P2wshScript`                 | A P2WSH script | Either a `ScriptPubKey` representing the witnessScript, a `bytearray` representing the witnessScript's hash or an `Address`  |
 | `P2pkScript`                  | A P2PK script | A `PublicKey` |
@@ -540,7 +584,7 @@ documenting, of course this is a very bad practice in a production environment
 and should be avoided at all costs.
 
 ### Spending a transaction
-This library offers `Solver`s to spend a previous transaction's output. Solvers
+This library offers `Solver`s to spend a previous transaction's output. Solvers can be found in `btcpy.structs.sig` and 
 expect as input all the data needed to create the appropriate scriptSig and witness.
 To create a `Solver`, the `Sighash` class is needed. This class represents a SIGHASH
 and its constructor takes two parameters:
@@ -579,12 +623,13 @@ order.
 for example:
 
 ```python
+>>> from btcpy.structs.sig import *
 >>> to_spend = Transaction.unhexlify('...')
 >>> unsigned = MutableTransction(version=1,
 ...                              ins=[TxIn(txid=to_spend.txid,
 ...                                        txout=0,
 ...                                        script_sig=ScriptSig.empty(),
-...                                        sequence=Sequence.max())]
+...                                        sequence=Sequence.max())],
 ...                              outs=[TxOut(value=100000,
 ...                                          n=0,
 ...                                          script_pubkey=P2pkhScript(pubk))],
@@ -840,3 +885,7 @@ done eventually:
 * Add further transaction creation helpers
 * Add RPC calls to Bitcoin Core nodes
 * Add networking with Bitcoin Core nodes
+
+# Acknowledgements
+Special thanks to [gdecicco](https://github.com/gdecicco) and [lorenzogiust](https://github.com/lorenzogiust)
+for contributing with performance improvements and general review.
