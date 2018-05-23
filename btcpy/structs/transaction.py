@@ -377,7 +377,7 @@ class Transaction(Immutable, HexSerializable, Jsonizable):
         return tx
 
     def __init__(self, version: int, timestamp: int, ins: list, outs: list,
-                 locktime: Locktime, txid: str=None):
+                 locktime: Locktime, txid: str=None) -> None:
 
         object.__setattr__(self, 'version', version)
         object.__setattr__(self, 'timestamp', timestamp)
