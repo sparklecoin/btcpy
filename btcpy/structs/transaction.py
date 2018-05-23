@@ -556,7 +556,8 @@ class Transaction(Immutable, HexSerializable, Jsonizable):
 
 class MutableTransaction(Mutable, Transaction):
 
-    def __init__(self, version: int, timestamp: int, ins: list, outs: list, locktime: Locktime):
+    def __init__(self, version: int, timestamp: int, ins: list,
+                 outs: list, locktime: Locktime) -> None:
 
         super().__init__(version, timestamp, ins, outs, locktime)
         ins = []
