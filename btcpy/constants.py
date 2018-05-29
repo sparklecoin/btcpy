@@ -1,13 +1,11 @@
 class Constants(object):
 
-    _lookup = {'base58.prefixes': {'1': ('p2pkh', 'mainnet'),
+    _lookup = {'base58.prefixes': {'P': ('p2pkh', 'mainnet'),
                                    'm': ('p2pkh', 'testnet'),
-                                   'n': ('p2pkh', 'testnet'),
-                                   '3': ('p2sh', 'mainnet'),
-                                   '2': ('p2sh', 'testnet')},
+                                   'p': ('p2sh', 'mainnet')},
                'base58.raw_prefixes': {('mainnet', 'p2pkh'): bytearray(b'\x37'),
                                        ('testnet', 'p2pkh'): bytearray(b'\x6f'),
-                                       ('mainnet', 'p2sh'): bytearray(b'\x2f'),
+                                       ('mainnet', 'p2sh'): bytearray(b'\x75'),
                                        ('testnet', 'p2sh'): bytearray(b'\xc4')},
                'bech32.net_to_hrp': {'mainnet': 'bc',
                                      'testnet': 'tb'},
