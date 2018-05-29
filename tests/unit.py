@@ -814,7 +814,7 @@ class TestHashlock(unittest.TestCase):
                                                                 self.locked_script.hexlify()))
 
 
-class TestAddress(unittest.TestCase):
+class TestBitcoinAddress(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -853,6 +853,35 @@ class TestAddress(unittest.TestCase):
             self.assertEqual(P2pkhScript(Address.from_string(address, strict=False)).pubkeyhash,
                              bytearray(unhexlify(pkh)))
             self.assertEqual(P2pkhAddress(bytearray(unhexlify(pkh)), mainnet=True).hash, bytearray(unhexlify(pkh)))
+
+
+class TestPeercoinAddress(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.good_addresses = {
+            ('mainnet', P2pkhAddress, 'PAdonateFczhZuKLkKHozrcyMJW7Y6TKvw',),
+            ('testnet', P2pkhAddress, 'mj46gUeZgeD9ufU7Fvz2dWqaX6Nswtbpba',),
+            ('mainnet', P2shAddress, 'p92W3t7YkKfQEPDb7cG9jQ6iMh7cpKLvwK',),
+        }
+        self.bad_addresses = {
+            'vioqwV3F4YzpgnfyUukGVMB3Hv83ujehKCiGWyrYyx2Z7hiKQy7SWUV9KgfMdV9J',
+            'bc1a',
+            '3rE3tz',
+            '1KKKK6N21XKo48zWKuQKXdvSsCf95ibHFa',
+        }
+
+    def test_success(self):
+        for net, addr_type, address in self.good_addresses:
+            from_string = Address.from_string(address, strict=False)
+            self.assertTrue(address == str(from_string))
+            self.assertTrue(from_string.__class__ == addr_type)
+            self.assertTrue(from_string.network == net)
+
+    def test_fail(self):
+        for address in self.bad_addresses:
+            with self.assertRaises(ValueError):
+                Address.from_string(address, strict=False)
 
 
 class TestStandardness(unittest.TestCase):
