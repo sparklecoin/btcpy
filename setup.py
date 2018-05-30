@@ -14,7 +14,7 @@ from distutils.core import setup
 from setuptools import find_packages
 
 setup(name='peerassets-btcpy',
-      version='0.5.1',
+      version='0.5.1.1',
       packages=find_packages(),
       install_requires=['ecdsa==0.13'],
       extras_require={'develop': ['python-bitcoinlib==0.7.0']},
