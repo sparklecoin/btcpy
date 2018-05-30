@@ -5,6 +5,7 @@ class Constants(object):
 
     _lookup = {'base58.prefixes': {'P': ('p2pkh', 'mainnet'),
                                    'm': ('p2pkh', 'testnet'),
+                                   'n': ('p2pkh', 'testnet'),
                                    'p': ('p2sh', 'mainnet')},
                'base58.raw_prefixes': {('mainnet', 'p2pkh'): bytearray(b'\x37'),
                                        ('testnet', 'p2pkh'): bytearray(b'\x6f'),
