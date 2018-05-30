@@ -1,11 +1,5 @@
-<p>
-<img src="https://www.chainside.net/images/logo.png" alt="chainside" width="80"> 
-<br \><br \>
-developed with :heart: by <a href="https://www.chainside.net">chainside</a>
-</p>
+# peerassets-btcpy
 
-
-# btcpy
 `btcpy` is a Python3 SegWit-compliant library which provides tools to handle
 Bitcoin data structures in a simple fashion. In particular, the main goal of
 this library is to provide a simple interface to parse and create complex
