@@ -17,6 +17,7 @@ from .script import (ScriptBuilder, P2wpkhV0Script, P2wshV0Script, P2shScript, N
                      CoinBaseScriptSig, ScriptPubKey)
 from ..lib.types import Immutable, Mutable, Jsonizable, HexSerializable, cached
 from ..lib.parsing import Parser, TransactionParser, Stream
+from ..constants import Constants
 
 
 # noinspection PyUnresolvedReferences
@@ -188,7 +189,7 @@ class TxOut(Immutable, HexSerializable, Jsonizable):
 
     @classmethod
     def from_json(cls, dic):
-        return cls(int(Decimal(dic['value']) * Decimal('1e6')),
+        return cls(int(Decimal(dic['value']) * Constants.get('decimals')),
                    dic['n'],
                    ScriptBuilder.identify(bytearray(unhexlify(dic['scriptPubKey']['hex']))))
 
@@ -215,7 +216,7 @@ class TxOut(Immutable, HexSerializable, Jsonizable):
         pass
 
     def to_json(self):
-        return {'value': str(Decimal(self.value) * Decimal('1e6')),
+        return {'value': str(Decimal(self.value) * Constants.get('decimals')),
                 'n': self.n,
                 'scriptPubKey': self.script_pubkey.to_json()}
 
