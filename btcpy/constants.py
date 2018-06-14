@@ -12,7 +12,8 @@ Constants = namedtuple('Constants', [
     'xpub_version',
     'xprv_version',
     'wif_prefix',
-    'decimals',
+    'from_unit',
+    'to_unit'
 ])
 
 
@@ -32,7 +33,8 @@ BitcoinMainnet = Constants(
     xpub_version=b'\x04\x88\xb2\x1e',
     xprv_version=b'\x04\x88\xad\xe4',
     wif_prefix=0x80,
-    decimals=Decimal('1e8'),
+    from_unit=Decimal('1e-8'),
+    to_unit=Decimal('1e8')
 )
 
 
@@ -53,8 +55,10 @@ BitcoinTestnet = Constants(
     xpub_version=b'\x04\x35\x87\xcf',
     xprv_version=b'\x04\x35\x83\x94',
     wif_prefix=0xef,
-    decimals=Decimal('1e8'),
+    from_unit=Decimal('1e-8'),
+    to_unit=Decimal('1e8')
 )
+
 
 PeercoinMainnet = Constants(
     name='PeercoinMainnet',
@@ -72,7 +76,8 @@ PeercoinMainnet = Constants(
     xpub_version=b'\x04\x88\xb2\x1e',
     xprv_version=b'\x04\x88\xad\xe4',
     wif_prefix=0xb7,
-    decimals=Decimal('1e6'),
+    from_unit=Decimal('1e-6'),
+    to_unit=Decimal('1e6')
 )
 
 
@@ -92,5 +97,6 @@ PeercoinTestnet = Constants(
     xpub_version=b'\x04\x35\x87\xcf',
     xprv_version=b'\x04\x35\x83\x94',
     wif_prefix=0xef,
-    decimals=Decimal('1e6'),
+    from_unit=Decimal('1e-6'),
+    to_unit=Decimal('1e6')
 )
