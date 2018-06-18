@@ -12,11 +12,11 @@
 
 from binascii import unhexlify, hexlify
 
-from ..lib.parsing import BlockParser, BlockHeaderParser, Parser
+from ..lib.parsing import BlockParser, BlockHeaderParser, Parser, TransactionParser
 from ..lib.types import Immutable, Jsonizable, HexSerializable, cached
+from btcpy.constants import BitcoinMainnet
 
 
-# from .transaction import Transaction
 # noinspection PyUnresolvedReferences
 class Block(Immutable, Jsonizable, HexSerializable):
 
@@ -27,12 +27,12 @@ class Block(Immutable, Jsonizable, HexSerializable):
         object.__setattr__(self, 'txns', txns)
 
     @staticmethod
-    def unhexlify(string):
-        return Block.deserialize(bytearray(unhexlify(string)))
+    def unhexlify(string, tx_parser=TransactionParser, network=BitcoinMainnet):
+        return Block.deserialize(bytearray(unhexlify(string)), tx_parser, network)
 
     @staticmethod
-    def deserialize(string):
-        parser = BlockParser(string)
+    def deserialize(string, tx_parser, network):
+        parser = BlockParser(string, tx_parser, network)
         header = parser.get_block_header()
         txns = parser.get_txns()
         return Block(header, txns)
