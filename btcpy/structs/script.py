@@ -20,6 +20,7 @@ from ..lib.parsing import ScriptParser, Parser, Stream, UnexpectedOperationFound
 from ..lib.opcodes import OpCodeConverter
 from .crypto import WrongPubKeyFormat, PublicKey
 from .address import P2pkhAddress, P2shAddress, P2wpkhAddress, P2wshAddress
+from btcpy.constants import BitcoinMainnet
 
 
 class WrongScriptTypeException(Exception):
@@ -420,11 +421,11 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
     def empty():
         return ScriptPubKey(bytearray())
 
-    def to_json(self):
+    def to_json(self, network=BitcoinMainnet):
         result = {'asm': str(self),
                   'hex': self.hexlify(),
                   'type': self.type}
-        if self.address() is not None:
+        if self.address(network) is not None:
             result['address'] = str(self.address())
         return result
 
@@ -450,7 +451,7 @@ class ScriptPubKey(BaseScript, metaclass=ABCMeta):
         """Subclasses which have standard types should reimplement this method"""
         return False
 
-    def address(self):
+    def address(self, network=BitcoinMainnet):
         """Subclasses which have a meaningful concept of address should reimplement this. For the moment
         we consider to have a meaningful address only for the following types: P2pkh, P2sh, P2wpkh, P2wsh"""
         return None
@@ -503,7 +504,7 @@ class P2pkhScript(ScriptPubKey):
     def type(self):
         return 'p2pkh'
 
-    def address(self, network):
+    def address(self, network=BitcoinMainnet):
         return P2pkhAddress.from_script(network, self)
 
     def is_standard(self):
@@ -527,7 +528,7 @@ class P2wpkhScript(P2pkhScript, SegWitScript, metaclass=ABCMeta):
                 return cls
         raise ValueError('Undefined version: {}'.format(segwit_version))
 
-    def address(self, network):
+    def address(self, network=BitcoinMainnet):
         return P2wpkhAddress.from_script(network, self)
 
 
@@ -607,7 +608,7 @@ class P2shScript(ScriptPubKey):
     def is_standard(self):
         return True
 
-    def address(self, network):
+    def address(self, network=BitcoinMainnet):
         return P2shAddress.from_script(network, self)
 
 
@@ -620,7 +621,7 @@ class P2wshScript(P2shScript, SegWitScript, metaclass=ABCMeta):
                 return cls
         raise ValueError('Undefined version: {}'.format(segwit_version))
 
-    def address(self, network):
+    def address(self, network=BitcoinMainnet):
         return P2wshAddress.from_script(network, self)
 
 

@@ -225,7 +225,7 @@ class TestBlock(unittest.TestCase):
 
     def test_empty_deserialized_string(self):
         for i in range(len(valid_blocks)):
-            parser = BlockParser(bytearray(unhexlify(valid_blocks[i]['raw'])))
+            parser = BlockParser(bytearray(unhexlify(valid_blocks[i]['raw'])), TransactionParser, BitcoinMainnet)
             parser.get_block_header()
             parser.get_txns()
             with self.assertRaises(StopIteration):
@@ -262,6 +262,14 @@ class TestTransaction(unittest.TestCase):
             self.assertEqual(parsed_script.hexlify(), value['hex'])
             self.assertEqual(str(parsed_script), value['asm'])
             self.assertEqual(parsed_script.type, value['type'])
+
+    # Fails on the last transaction for some reason :\
+    def test_json(self):
+        for data in transactions:
+            tx = Transaction.unhexlify(data["raw"])
+            tx_json = tx.to_json()
+            tx_from_json = Transaction.from_json(tx_json)
+            self.assertEqual(tx, tx_from_json)
 
 
 class TestSegWitAddress(unittest.TestCase):

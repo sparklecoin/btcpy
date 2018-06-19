@@ -13,7 +13,6 @@ from abc import ABCMeta, abstractmethod
 from .base58 import b58encode_check, b58decode_check
 
 from .bech32 import decode, encode
-from ..constants import Constants
 from ..structs.address import Address, P2pkhAddress, P2shAddress, P2wpkhAddress, P2wshAddress
 
 
