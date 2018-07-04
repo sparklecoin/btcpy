@@ -626,11 +626,12 @@ class PeercoinTx(Transaction):
 
     def to_mutable(self):
         return PeercoinMutableTx(
-            self.version,
-            [txin.to_mutable() for txin in self.ins],
-            self.outs,
-            self.locktime,
-            network,
+            version=self.version,
+            timestamp=self.timestamp,
+            ins=[txin.to_mutable() for txin in self.ins],
+            outs=self.outs,
+            locktime=self.locktime,
+            network=self.network,
         )
 
     def __str__(self):
