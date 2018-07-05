@@ -13,8 +13,6 @@ from abc import ABCMeta, abstractmethod
 from .base58 import b58encode_check, b58decode_check
 
 from .bech32 import decode, encode
-from ..setup import is_mainnet, net_name, strictness
-from ..constants import Constants
 from ..structs.address import Address, P2pkhAddress, P2shAddress, P2wpkhAddress, P2wshAddress
 
 
@@ -38,11 +36,6 @@ class Codec(metaclass=ABCMeta):
     def decode(string: str, strict=None) -> Address:
         raise NotImplemented
 
-    @classmethod
-    def check_network(cls, network):
-        if (network == 'mainnet') != is_mainnet():
-            raise CouldNotDecode('Trying to parse {} address in {} environment'.format(network, net_name()))
-
 
 class Base58Codec(Codec):
 
@@ -51,18 +44,17 @@ class Base58Codec(Codec):
     @staticmethod
     def encode(address):
         try:
-            prefix = Constants.get('base58.raw_prefixes')[(address.network, address.get_type())]
+            prefix = address.network.base58_raw_prefixes[address.get_type()]
         except KeyError:
             raise CouldNotEncode('Impossible to encode address type: {}, network: {}'.format(address.get_type(),
                                                                                              address.network))
         return b58encode_check(bytes(prefix + address.hash))
 
     @staticmethod
-    @strictness
-    def decode(string, strict=None):
+    def decode(network, string):
 
         try:
-            addr_type, network = Constants.get('base58.prefixes')[string[0]]
+            addr_type = network.base58_prefixes[string[0]]
         except KeyError:
             raise CouldNotDecode('Impossible to decode address {}'.format(string))
         hashed_data = bytearray(b58decode_check(string))[1:]
@@ -70,9 +62,6 @@ class Base58Codec(Codec):
         if len(hashed_data) != Base58Codec.hash_len:
             raise CouldNotDecode('Data of the wrong length: {}, expected {}'.format(len(hashed_data),
                                                                                     Base58Codec.hash_len))
-        if strict:
-            Base58Codec.check_network(network)
-
         if addr_type == 'p2pkh':
             cls = P2pkhAddress
         elif addr_type == 'p2sh':
@@ -80,7 +69,7 @@ class Base58Codec(Codec):
         else:
             raise ValueError('Unknown address type: {}'.format(addr_type))
 
-        return cls(hashed_data, network == 'mainnet')
+        return cls(network, hashed_data)
 
 
 class Bech32Codec(Codec):
@@ -90,12 +79,10 @@ class Bech32Codec(Codec):
 
     @staticmethod
     def encode(address):
-        prefix = Constants.get('bech32.net_to_hrp')[address.network]
-        return encode(prefix, address.version, address.hash)
+        return encode(address.network.hrp, address.version, address.hash)
 
     @staticmethod
-    @strictness
-    def decode(string, strict=None):
+    def decode(network, string):
 
         if not string:
             raise CouldNotDecode('Impossible to decode empty string')
@@ -106,8 +93,11 @@ class Bech32Codec(Codec):
                 raise CouldNotDecode('String {} mixes upper- and lower-case characters'.format(string))
 
         string = string.lower()
+    
+        if string[:2] != network.bech32_hrp:
+            raise CouldNotDecode('Impossible to decode address {}'.format(string))
+
         try:
-            network = Constants.get('bech32.hrp_to_net')[string[:2]]
             addr_type = Bech32Codec.lengths[len(string)]
         except KeyError:
             raise CouldNotDecode('Impossible to decode address {}'.format(string))
@@ -116,9 +106,6 @@ class Bech32Codec(Codec):
         if not hashed_data:
             raise CouldNotDecode('Empty hash')
 
-        if strict:
-            Bech32Codec.check_network(network)
-
         if addr_type == 'p2wpkh':
             cls = P2wpkhAddress
         elif addr_type == 'p2wsh':
@@ -126,4 +113,4 @@ class Bech32Codec(Codec):
         else:
             raise ValueError('Unknown address type: {}'.format(addr_type))
 
-        return cls(bytearray(hashed_data), version, network == 'mainnet')
+        return cls(network, bytearray(hashed_data), version)
