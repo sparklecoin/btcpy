@@ -100,3 +100,45 @@ PeercoinTestnet = Constants(
     from_unit=Decimal('1e-6'),
     to_unit=Decimal('1e6')
 )
+
+
+SparklecoinMainnet = Constants(
+    name='SparklecoinMainnet',
+    base58_prefixes={
+        'S': 'p2pkh',
+        's': 'p2sh',
+    },
+    base58_raw_prefixes={
+        'p2pkh': bytearray(b'\x3f'),
+        'p2sh': bytearray(b'\x7d'),
+    },
+    bech32_hrp='bc',
+    bech32_net='mainnet',
+    xkeys_prefix='x',
+    xpub_version=b'\x04\x88\xb2\x1e',
+    xprv_version=b'\x04\x88\xad\xe4',
+    wif_prefix=0xbf,
+    from_unit=Decimal('1e-6'),
+    to_unit=Decimal('1e6')
+)
+
+
+SparklecoinTestnet = Constants(
+    name='SparklecoinTestnet',
+    base58_prefixes={
+        't': 'p2pkh',
+        '2': 'p2sh',
+    },
+    base58_raw_prefixes={
+        'p2pkh': bytearray(b'\x7f'),
+        'p2sh': bytearray(b'\xc4'),
+    },
+    bech32_hrp='tb',
+    bech32_net='testnet',
+    xkeys_prefix='t',
+    xpub_version=b'\x04\x35\x87\xcf',
+    xprv_version=b'\x04\x35\x83\x94',
+    wif_prefix=0xff,
+    from_unit=Decimal('1e-6'),
+    to_unit=Decimal('1e6')
+)
